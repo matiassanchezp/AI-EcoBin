@@ -3,6 +3,7 @@ from flask_cors import CORS
 from inference_sdk import InferenceHTTPClient
 import csv
 import os
+import shutil
 from datetime import datetime
 
 app = Flask(__name__)
@@ -15,6 +16,10 @@ CLIENT = InferenceHTTPClient(
 
 MODEL_ID = "organic-and-anorganic-waste/4"
 LOG_PATH = "../data/logs/clasificaciones.csv"
+ARCHIVE_DIR = "../data/logs/archivo"
+CICLOS_PATH = "../data/logs/ciclos.csv"
+
+estado_nivel = {"distancia_cm": None, "lleno": False, "actualizado": None}
 
 def clasificar_categoria(nombre_clase):
     nombre_clase = nombre_clase.lower()
@@ -68,6 +73,70 @@ def history():
             registros.append(fila)
     registros.reverse()
     return jsonify(registros[:50])
+
+@app.route("/fill_status", methods=["POST"])
+def fill_status_post():
+    try:
+        datos = request.get_json()
+        estado_nivel["distancia_cm"] = datos.get("distancia_cm")
+        estado_nivel["lleno"] = datos.get("lleno", False)
+        estado_nivel["actualizado"] = datetime.now().isoformat()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/fill_status", methods=["GET"])
+def fill_status_get():
+    return jsonify(estado_nivel)
+
+def registrar_ciclo():
+    if not os.path.isfile(LOG_PATH):
+        return
+
+    with open(LOG_PATH, mode="r", newline="") as f:
+        reader = list(csv.DictReader(f))
+
+    if not reader:
+        return
+
+    inicio = reader[0]["timestamp"]
+    fin = reader[-1]["timestamp"]
+    total_organico = sum(1 for r in reader if r["categoria"] == "organico")
+    total_inorganico = sum(1 for r in reader if r["categoria"] == "inorganico")
+
+    existe = os.path.isfile(CICLOS_PATH)
+    with open(CICLOS_PATH, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        if not existe:
+            writer.writerow(["inicio", "fin", "total_organico", "total_inorganico", "total_objetos"])
+        writer.writerow([inicio, fin, total_organico, total_inorganico, total_organico + total_inorganico])
+
+@app.route("/reset", methods=["POST"])
+def reset():
+    try:
+        registrar_ciclo()
+
+        if os.path.isfile(LOG_PATH):
+            os.makedirs(ARCHIVE_DIR, exist_ok=True)
+            marca_tiempo = datetime.now().strftime("%Y%m%d_%H%M%S")
+            destino = os.path.join(ARCHIVE_DIR, f"clasificaciones_{marca_tiempo}.csv")
+            shutil.move(LOG_PATH, destino)
+
+        return jsonify({"status": "ok", "mensaje": "Caneca vaciada, ciclo registrado y contador reiniciado"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/ciclos", methods=["GET"])
+def ciclos():
+    if not os.path.isfile(CICLOS_PATH):
+        return jsonify([])
+    registros = []
+    with open(CICLOS_PATH, mode="r", newline="") as f:
+        reader = csv.DictReader(f)
+        for fila in reader:
+            registros.append(fila)
+    registros.reverse()
+    return jsonify(registros)
 
 @app.route("/", methods=["GET"])
 def home():

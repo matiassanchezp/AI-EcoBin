@@ -15,11 +15,25 @@
     text-align: center;
     color: #2e7d32;
   }
+  .alerta {
+    max-width: 600px;
+    margin: 0 auto 20px auto;
+    background: #ffebee;
+    border: 2px solid #e53935;
+    color: #c62828;
+    padding: 15px;
+    border-radius: 10px;
+    text-align: center;
+    font-weight: bold;
+    display: none;
+  }
+  .alerta.visible { display: block; }
+
   .stats {
     display: flex;
     justify-content: center;
     gap: 20px;
-    margin-bottom: 30px;
+    margin-bottom: 10px;
   }
   .card {
     background: white;
@@ -33,6 +47,28 @@
   .card.inorganico { border-top: 5px solid #2196f3; }
   .card h2 { margin: 0; font-size: 32px; }
   .card p { margin: 5px 0 0; color: #666; }
+
+  .nivel {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #555;
+    font-size: 14px;
+  }
+
+  .acciones {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+  .btn-reset {
+    background: #e53935;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .btn-reset:hover { background: #c62828; }
 
   .latest {
     max-width: 500px;
@@ -53,7 +89,7 @@
   table {
     width: 100%;
     max-width: 800px;
-    margin: 0 auto;
+    margin: 0 auto 30px auto;
     border-collapse: collapse;
     background: white;
     border-radius: 12px;
@@ -72,6 +108,11 @@
   tr.organico td.categoria-cell { color: #2e7d32; font-weight: bold; }
   tr.inorganico td.categoria-cell { color: #1565c0; font-weight: bold; }
 
+  h3 {
+    text-align: center;
+    color: #555;
+  }
+
   .estado {
     text-align: center;
     color: #999;
@@ -84,6 +125,8 @@
 
   <h1>🗑️ AI-EcoBin — Panel de clasificacion</h1>
 
+  <div class="alerta" id="alerta-llena">⚠️ La caneca esta llena — vaciala pronto</div>
+
   <div class="stats">
     <div class="card organico">
       <h2 id="count-organico">0</h2>
@@ -93,6 +136,12 @@
       <h2 id="count-inorganico">0</h2>
       <p>Inorganico</p>
     </div>
+  </div>
+
+  <div class="nivel" id="nivel-info">Nivel de llenado: sin datos</div>
+
+  <div class="acciones">
+    <button class="btn-reset" onclick="vaciarCaneca()">🗑️ Vaciar caneca (reiniciar contador)</button>
   </div>
 
   <div class="latest">
@@ -111,6 +160,20 @@
       </tr>
     </thead>
     <tbody id="tabla-historial"></tbody>
+  </table>
+
+  <h3>Historial de ciclos (vaciados anteriores)</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Inicio</th>
+        <th>Fin</th>
+        <th>Organico</th>
+        <th>Inorganico</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody id="tabla-ciclos"></tbody>
   </table>
 
   <p class="estado" id="estado-conexion">Conectando al servidor...</p>
@@ -165,8 +228,72 @@
       }
     }
 
+    async function actualizarNivel() {
+      try {
+        const respuesta = await fetch(`${BACKEND_URL}/fill_status`);
+        const datos = await respuesta.json();
+
+        const alerta = document.getElementById("alerta-llena");
+        const nivelInfo = document.getElementById("nivel-info");
+
+        if (datos.distancia_cm !== null && datos.distancia_cm !== undefined) {
+          nivelInfo.textContent = `Nivel de llenado: distancia libre ${datos.distancia_cm} cm (ultima lectura: ${new Date(datos.actualizado).toLocaleTimeString()})`;
+        }
+
+        if (datos.lleno) {
+          alerta.classList.add("visible");
+        } else {
+          alerta.classList.remove("visible");
+        }
+      } catch (error) {
+        // silencioso, no bloquea el resto del panel
+      }
+    }
+
+    async function actualizarCiclos() {
+      try {
+        const respuesta = await fetch(`${BACKEND_URL}/ciclos`);
+        const datos = await respuesta.json();
+
+        const tabla = document.getElementById("tabla-ciclos");
+        tabla.innerHTML = "";
+
+        datos.forEach((ciclo) => {
+          const fila = document.createElement("tr");
+          fila.innerHTML = `
+            <td>${new Date(ciclo.inicio).toLocaleString()}</td>
+            <td>${new Date(ciclo.fin).toLocaleString()}</td>
+            <td>${ciclo.total_organico}</td>
+            <td>${ciclo.total_inorganico}</td>
+            <td>${ciclo.total_objetos}</td>
+          `;
+          tabla.appendChild(fila);
+        });
+      } catch (error) {
+        // silencioso
+      }
+    }
+
+    async function vaciarCaneca() {
+      const confirmar = confirm("¿Confirmas que vaciaste la caneca fisicamente? Esto reiniciara el contador y registrara el ciclo.");
+      if (!confirmar) return;
+
+      try {
+        const respuesta = await fetch(`${BACKEND_URL}/reset`, { method: "POST" });
+        const resultado = await respuesta.json();
+        alert(resultado.mensaje || "Contador reiniciado");
+        actualizarPanel();
+        actualizarCiclos();
+      } catch (error) {
+        alert("No se pudo reiniciar el contador. ¿Esta corriendo el backend?");
+      }
+    }
+
     actualizarPanel();
+    actualizarNivel();
+    actualizarCiclos();
     setInterval(actualizarPanel, 3000);
+    setInterval(actualizarNivel, 3000);
   </script>
 
 </body>
