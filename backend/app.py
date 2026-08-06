@@ -1,10 +1,12 @@
 ﻿from flask import Flask, request, jsonify
+from flask_cors import CORS
 from inference_sdk import InferenceHTTPClient
 import csv
 import os
 from datetime import datetime
 
 app = Flask(__name__)
+CORS(app)
 
 CLIENT = InferenceHTTPClient(
     api_url="https://serverless.roboflow.com",
@@ -54,6 +56,18 @@ def classify():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/history", methods=["GET"])
+def history():
+    if not os.path.isfile(LOG_PATH):
+        return jsonify([])
+    registros = []
+    with open(LOG_PATH, mode="r", newline="") as f:
+        reader = csv.DictReader(f)
+        for fila in reader:
+            registros.append(fila)
+    registros.reverse()
+    return jsonify(registros[:50])
 
 @app.route("/", methods=["GET"])
 def home():

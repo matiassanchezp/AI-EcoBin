@@ -1,1 +1,173 @@
-# frontend
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>AI-EcoBin | Panel de clasificacion</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f4f6f5;
+    margin: 0;
+    padding: 20px;
+    color: #222;
+  }
+  h1 {
+    text-align: center;
+    color: #2e7d32;
+  }
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px 30px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    text-align: center;
+    min-width: 140px;
+  }
+  .card.organico { border-top: 5px solid #4caf50; }
+  .card.inorganico { border-top: 5px solid #2196f3; }
+  .card h2 { margin: 0; font-size: 32px; }
+  .card p { margin: 5px 0 0; color: #666; }
+
+  .latest {
+    max-width: 500px;
+    margin: 0 auto 30px auto;
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    text-align: center;
+  }
+  .latest .categoria {
+    font-size: 24px;
+    font-weight: bold;
+  }
+  .categoria.organico { color: #2e7d32; }
+  .categoria.inorganico { color: #1565c0; }
+
+  table {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  th, td {
+    padding: 10px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+  }
+  th {
+    background: #2e7d32;
+    color: white;
+  }
+  tr.organico td.categoria-cell { color: #2e7d32; font-weight: bold; }
+  tr.inorganico td.categoria-cell { color: #1565c0; font-weight: bold; }
+
+  .estado {
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>🗑️ AI-EcoBin — Panel de clasificacion</h1>
+
+  <div class="stats">
+    <div class="card organico">
+      <h2 id="count-organico">0</h2>
+      <p>Organico</p>
+    </div>
+    <div class="card inorganico">
+      <h2 id="count-inorganico">0</h2>
+      <p>Inorganico</p>
+    </div>
+  </div>
+
+  <div class="latest">
+    <p>Ultima clasificacion</p>
+    <div class="categoria" id="latest-categoria">Esperando datos...</div>
+    <p id="latest-detalle"></p>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Fecha y hora</th>
+        <th>Categoria</th>
+        <th>Clase detectada</th>
+        <th>Confianza</th>
+      </tr>
+    </thead>
+    <tbody id="tabla-historial"></tbody>
+  </table>
+
+  <p class="estado" id="estado-conexion">Conectando al servidor...</p>
+
+  <script>
+    const BACKEND_URL = "http://localhost:5000";
+
+    async function actualizarPanel() {
+      try {
+        const respuesta = await fetch(`${BACKEND_URL}/history`);
+        const datos = await respuesta.json();
+
+        document.getElementById("estado-conexion").textContent =
+          "Conectado — actualizado " + new Date().toLocaleTimeString();
+
+        let countOrganico = 0;
+        let countInorganico = 0;
+
+        const tabla = document.getElementById("tabla-historial");
+        tabla.innerHTML = "";
+
+        datos.forEach((registro, index) => {
+          if (registro.categoria === "organico") countOrganico++;
+          if (registro.categoria === "inorganico") countInorganico++;
+
+          const fila = document.createElement("tr");
+          fila.className = registro.categoria;
+          fila.innerHTML = `
+            <td>${new Date(registro.timestamp).toLocaleString()}</td>
+            <td class="categoria-cell">${registro.categoria}</td>
+            <td>${registro.clase_original}</td>
+            <td>${(parseFloat(registro.confianza) * 100).toFixed(1)}%</td>
+          `;
+          tabla.appendChild(fila);
+
+          if (index === 0) {
+            document.getElementById("latest-categoria").textContent =
+              registro.categoria.toUpperCase();
+            document.getElementById("latest-categoria").className =
+              "categoria " + registro.categoria;
+            document.getElementById("latest-detalle").textContent =
+              `${registro.clase_original} (${(parseFloat(registro.confianza)*100).toFixed(1)}% confianza)`;
+          }
+        });
+
+        document.getElementById("count-organico").textContent = countOrganico;
+        document.getElementById("count-inorganico").textContent = countInorganico;
+
+      } catch (error) {
+        document.getElementById("estado-conexion").textContent =
+          "No se pudo conectar al servidor (¿esta corriendo el backend?)";
+      }
+    }
+
+    actualizarPanel();
+    setInterval(actualizarPanel, 3000);
+  </script>
+
+</body>
+</html>

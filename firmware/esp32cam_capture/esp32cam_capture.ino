@@ -2,9 +2,9 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-const char* ssid = "TU_WIFI";
-const char* password = "TU_PASSWORD";
-const char* serverUrl = "http://TU_IP_O_DOMINIO:5000/classify";
+const char* ssid = "0101200322112009 2.4 Gz";
+const char* password = "21329227";
+const char* serverUrl = "http://192.168.5.127:5000/classify";
 
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
