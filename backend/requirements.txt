@@ -3,3 +3,5 @@ inference-sdk
 pillow
 
 flask-cors
+
+requests

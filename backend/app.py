@@ -1,9 +1,12 @@
 ﻿from flask import Flask, request, jsonify
 from flask_cors import CORS
 from inference_sdk import InferenceHTTPClient
+import base64
 import csv
 import os
 import shutil
+import threading
+import requests
 from datetime import datetime
 
 app = Flask(__name__)
@@ -14,12 +17,14 @@ CLIENT = InferenceHTTPClient(
     api_key=os.environ.get("ROBOFLOW_API_KEY")
 )
 
+SHEETS_URL = os.environ.get("SHEETS_URL")
+SHEETS_TOKEN = os.environ.get("SHEETS_TOKEN")
+
 MODEL_ID = "organic-and-anorganic-waste/4"
 LOG_PATH = "../data/logs/clasificaciones.csv"
 ARCHIVE_DIR = "../data/logs/archivo"
 CICLOS_PATH = "../data/logs/ciclos.csv"
-
-estado_nivel = {"distancia_cm": None, "lleno": False, "actualizado": None}
+IMAGENES_DIR = "../data/imagenes"
 
 def clasificar_categoria(nombre_clase):
     nombre_clase = nombre_clase.lower()
@@ -38,22 +43,62 @@ def guardar_log(categoria, clase_original, confianza):
             writer.writerow(["timestamp", "categoria", "clase_original", "confianza"])
         writer.writerow([datetime.now().isoformat(), categoria, clase_original, confianza])
 
+def guardar_imagen_local(imagen_bytes, nombre_archivo):
+    os.makedirs(IMAGENES_DIR, exist_ok=True)
+    with open(os.path.join(IMAGENES_DIR, nombre_archivo), "wb") as f:
+        f.write(imagen_bytes)
+
+def enviar_a_sheets(imagen_bytes, nombre_archivo, fecha, hora, tipo, clase, confianza):
+    if not SHEETS_URL:
+        return
+    try:
+        payload = {
+            "token": SHEETS_TOKEN,
+            "fecha": fecha,
+            "hora": hora,
+            "tipo": tipo,
+            "clase": clase,
+            "confianza": confianza,
+            "nombre_archivo": nombre_archivo,
+            "imagen_base64": base64.b64encode(imagen_bytes).decode("utf-8")
+        }
+        r = requests.post(SHEETS_URL, json=payload, timeout=60)
+        print("Google Sheets:", r.status_code, r.text[:200])
+    except Exception as e:
+        print("Error enviando a Google Sheets:", e)
+
 @app.route("/classify", methods=["POST"])
 def classify():
     try:
         imagen_bytes = request.get_data()
+        ahora = datetime.now()
+
         temp_path = "temp_imagen.jpg"
         with open(temp_path, "wb") as f:
             f.write(imagen_bytes)
+
         resultado = CLIENT.infer(temp_path, model_id=MODEL_ID)
         predicciones = resultado.get("predictions", [])
+
         if not predicciones:
-            return jsonify({"categoria": "desconocido", "confianza": 0.0})
-        mejor = max(predicciones, key=lambda p: p["confidence"])
-        nombre_clase = mejor["class"]
-        confianza = round(mejor["confidence"], 3)
-        categoria = clasificar_categoria(nombre_clase)
-        guardar_log(categoria, nombre_clase, confianza)
+            categoria, nombre_clase, confianza = "desconocido", "-", 0.0
+        else:
+            mejor = max(predicciones, key=lambda p: p["confidence"])
+            nombre_clase = mejor["class"]
+            confianza = round(mejor["confidence"], 3)
+            categoria = clasificar_categoria(nombre_clase)
+            guardar_log(categoria, nombre_clase, confianza)
+
+        nombre_archivo = ahora.strftime("%Y%m%d_%H%M%S") + "_" + categoria + ".jpg"
+        guardar_imagen_local(imagen_bytes, nombre_archivo)
+
+        threading.Thread(
+            target=enviar_a_sheets,
+            args=(imagen_bytes, nombre_archivo, ahora.strftime("%Y-%m-%d"),
+                  ahora.strftime("%H:%M:%S"), categoria, nombre_clase, confianza),
+            daemon=True
+        ).start()
+
         return jsonify({
             "categoria": categoria,
             "clase_detectada": nombre_clase,
@@ -73,21 +118,6 @@ def history():
             registros.append(fila)
     registros.reverse()
     return jsonify(registros[:50])
-
-@app.route("/fill_status", methods=["POST"])
-def fill_status_post():
-    try:
-        datos = request.get_json()
-        estado_nivel["distancia_cm"] = datos.get("distancia_cm")
-        estado_nivel["lleno"] = datos.get("lleno", False)
-        estado_nivel["actualizado"] = datetime.now().isoformat()
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/fill_status", methods=["GET"])
-def fill_status_get():
-    return jsonify(estado_nivel)
 
 def registrar_ciclo():
     if not os.path.isfile(LOG_PATH):
