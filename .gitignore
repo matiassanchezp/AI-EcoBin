@@ -220,3 +220,7 @@ __marimo__/
 backend/temp_imagen.jpg
 
 data/imagenes/
+
+keys.txt
+data/logs/
+data/imagenes/
