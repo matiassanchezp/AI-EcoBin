@@ -10,7 +10,7 @@ import requests
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["https://matiassanchezp.github.io"])
 
 CLIENT = InferenceHTTPClient(
     api_url="https://serverless.roboflow.com",
@@ -21,10 +21,13 @@ SHEETS_URL = os.environ.get("SHEETS_URL")
 SHEETS_TOKEN = os.environ.get("SHEETS_TOKEN")
 
 MODEL_ID = "organic-and-anorganic-waste/4"
-LOG_PATH = "../data/logs/clasificaciones.csv"
-ARCHIVE_DIR = "../data/logs/archivo"
-CICLOS_PATH = "../data/logs/ciclos.csv"
-IMAGENES_DIR = "../data/imagenes"
+DATA_DIR = os.environ.get("DATA_DIR", os.path.normpath(os.path.join(BASE_DIR, "..", "data")))
+LOG_DIR = os.path.join(DATA_DIR, "logs")
+LOG_PATH = os.path.join(LOG_DIR, "clasificaciones.csv")
+ARCHIVE_DIR = os.path.join(LOG_DIR, "archivo")
+CICLOS_PATH = os.path.join(LOG_DIR, "ciclos.csv")
+IMAGENES_DIR = os.path.join(DATA_DIR, "imagenes")
+os.makedirs(LOG_DIR, exist_ok=True)
 
 def clasificar_categoria(nombre_clase):
     nombre_clase = nombre_clase.lower()
@@ -73,7 +76,7 @@ def classify():
         imagen_bytes = request.get_data()
         ahora = datetime.now()
 
-        temp_path = "temp_imagen.jpg"
+        temp_path = os.path.join(DATA_DIR, "temp_imagen.jpg")
         with open(temp_path, "wb") as f:
             f.write(imagen_bytes)
 
@@ -174,3 +177,4 @@ def home():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+

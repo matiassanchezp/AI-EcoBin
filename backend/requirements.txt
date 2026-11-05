@@ -1,7 +1,5 @@
 ﻿flask
-inference-sdk
-pillow
-
 flask-cors
-
+inference-sdk
 requests
+gunicorn
