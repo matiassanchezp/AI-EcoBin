@@ -21,6 +21,7 @@ SHEETS_URL = os.environ.get("SHEETS_URL")
 SHEETS_TOKEN = os.environ.get("SHEETS_TOKEN")
 
 MODEL_ID = "organic-and-anorganic-waste/4"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR", os.path.normpath(os.path.join(BASE_DIR, "..", "data")))
 LOG_DIR = os.path.join(DATA_DIR, "logs")
 LOG_PATH = os.path.join(LOG_DIR, "clasificaciones.csv")
@@ -177,4 +178,5 @@ def home():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
